@@ -6,7 +6,7 @@ import { useAuthStore } from '../stores/auth.js'
 import { useRoomStore } from '../stores/room.js'
 import { usePlayerStore } from '../stores/player.js'
 import { setReady } from '../services/rooms.js'
-import { startRound } from '../services/game.js'
+import { activateRound, startRound } from '../services/game.js'
 import CharacterAvatar from '../components/common/CharacterAvatar.vue'
 import { audioManager } from '../audio/manager.js'
 
@@ -16,7 +16,7 @@ const me=computed(()=>roomStore.players.find(p=>p.uid===auth.uid)); const canSta
 onMounted(async()=>{ await auth.initialize(); playerStore.roomCode=code.value; roomStore.subscribe(code.value) })
 onBeforeUnmount(()=>roomStore.cleanup())
 watch(()=>roomStore.players,players=>{const ids=new Set(players.map(player=>player.uid));if(knownPlayers){for(const uid of ids)if(!knownPlayers.has(uid))audioManager.playOnce('join',`join:${code.value}:${uid}`)}knownPlayers=ids},{deep:true})
-watch(()=>roomStore.room?.status,status=>{if(status==='playing'&&roomStore.room?.currentRoundId){audioManager.playOnce('roundStart',`round-start:${code.value}:${roomStore.room.currentRoundId}`);router.replace(`/room/${code.value}/round/${roomStore.room.currentRoundId}`)}if(status==='results')router.replace(`/room/${code.value}/results`)})
+watch(()=>roomStore.room?.status,async status=>{if(status==='preparing'&&roomStore.room?.currentRoundId){try{await activateRound(code.value,roomStore.room.currentRoundId)}catch(e){error.value=e.message}}if(status==='playing'&&roomStore.room?.currentRoundId){audioManager.playOnce('roundStart',`round-start:${code.value}:${roomStore.room.currentRoundId}`);router.replace(`/room/${code.value}/round/${roomStore.room.currentRoundId}`)}if(status==='results')router.replace(`/room/${code.value}/results`)})
 async function toggleReady(){ if(me.value) await setReady(code.value,auth.uid,!me.value.ready) }
 async function copyInvite(){ await navigator.clipboard.writeText(`${location.origin}${import.meta.env.BASE_URL}join/${code.value}`) }
 async function begin(){ busy.value=true;error.value='';try{let letter;if(roomStore.room.letterMode==='host'){letter=window.prompt('اختار حرف الجولة بالعربي');if(!letter){busy.value=false;return}}const {roundId}=await startRound(code.value,letter?.trim());audioManager.playOnce('roundStart',`round-start:${code.value}:${roundId}`);router.push(`/room/${code.value}/round/${roundId}`)}catch(e){error.value=e.message}finally{busy.value=false} }

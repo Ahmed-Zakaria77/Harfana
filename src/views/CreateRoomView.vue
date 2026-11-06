@@ -18,9 +18,9 @@ const instantStopEnabled = ref(true)
 const chosen = ref(['ولد','بنت','جماد','حيوان','بلاد'])
 const custom = ref('')
 const busy=ref(false), error=ref('')
-const valid = computed(() => nickname.value.trim().length >= 2 && roomName.value.trim() && chosen.value.length >= 2)
-function toggle(c){ chosen.value = chosen.value.includes(c) ? chosen.value.filter(x => x !== c) : [...chosen.value, c] }
-function addCustom(){ const value = custom.value.trim(); if(value && !chosen.value.includes(value)){ chosen.value.push(value); custom.value = '' } }
+const valid = computed(() => nickname.value.trim().length >= 2 && roomName.value.trim() && chosen.value.length >= 2 && chosen.value.length <= 10)
+function toggle(c){if(chosen.value.includes(c)){chosen.value=chosen.value.filter(x=>x!==c);return}if(chosen.value.length>=10){error.value='الحد الأقصى ١٠ تصنيفات.';return}error.value='';chosen.value=[...chosen.value,c]}
+function addCustom(){ const value = custom.value.trim().slice(0,40);if(chosen.value.length>=10){error.value='الحد الأقصى ١٠ تصنيفات.';return}if(value && !chosen.value.includes(value)){ chosen.value.push(value); custom.value = '';error.value='' } }
 function savePreset(){ localStorage.setItem('harfana:preset', JSON.stringify(chosen.value)); window.alert('اتحفظت التصنيفات على الجهاز ✓') }
 async function submit(){ busy.value=true;error.value='';try{const user=await auth.initialize();if(!user||!auth.uid)throw new Error(auth.error||'إعدادات Firebase ناقصة');playerStore.nickname=nickname.value.trim();playerStore.avatar=avatar.value;const code=await createRoom({uid:auth.uid,nickname:playerStore.nickname,avatar:avatar.value,name:roomName.value.trim(),rounds:rounds.value,duration:duration.value,categories:chosen.value,letterMode:letterMode.value,instantStopEnabled:instantStopEnabled.value});playerStore.roomCode=code;router.push(`/room/${code}`)}catch(e){error.value=e.message===auth.error?auth.error:firebaseErrorMessage('create-room-view',e,'معرفناش نعمل القعدة. جرّب تاني.')}finally{busy.value=false}}
 </script>

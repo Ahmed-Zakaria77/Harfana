@@ -14,8 +14,8 @@ export async function createRoom({ uid, nickname, avatar, name, rounds, duration
       await runTransaction(db, async tx => {
         if ((await tx.get(roomRef)).exists()) throw new Error('CODE_COLLISION')
         const now = serverTimestamp()
-        tx.set(roomRef, { code, name, hostUid: uid, status: 'lobby', playerCount: 1, maxPlayers: 10, totalRounds: Number(rounds), durationSeconds: Number(duration), categories, letterMode, instantStopEnabled:Boolean(instantStopEnabled), usedLetters: [], currentRoundId: null, createdAt: now, updatedAt: now })
-        tx.set(playerRef, { uid, nickname, avatar:normalizeCharacterId(avatar), ready: false, connected: true, totalScore: 0, joinedAt: now, lastSeenAt: now })
+        tx.set(roomRef, { code, name, hostUid: uid, status: 'lobby', playerCount: 1, readyCount: 1, playerUids: [uid], maxPlayers: 10, totalRounds: Number(rounds), roundNumber: 0, durationSeconds: Number(duration), categories, letterMode, instantStopEnabled:Boolean(instantStopEnabled), usedLetters: [], currentRoundId: null, createdAt: now, updatedAt: now })
+        tx.set(playerRef, { uid, nickname, avatar:normalizeCharacterId(avatar), ready: true, connected: true, joinedAt: now, lastSeenAt: now })
       })
       return code
     } catch (error) {
@@ -36,8 +36,8 @@ export async function joinRoom({ code, uid, nickname, avatar }) {
     if (playerSnap.exists()) { tx.update(playerRef, { connected: true, lastSeenAt: serverTimestamp(), nickname, avatar:normalizeCharacterId(avatar) }); return }
     if (room.status !== 'lobby') throw new Error('GAME_STARTED')
     if (room.playerCount >= room.maxPlayers) throw new Error('ROOM_FULL')
-    tx.update(roomRef, { playerCount: room.playerCount + 1, updatedAt: serverTimestamp() })
-    tx.set(playerRef, { uid, nickname, avatar:normalizeCharacterId(avatar), ready: false, connected: true, totalScore: 0, joinedAt: serverTimestamp(), lastSeenAt: serverTimestamp() })
+    tx.update(roomRef, { playerCount: room.playerCount + 1, playerUids: [...room.playerUids, uid], updatedAt: serverTimestamp() })
+    tx.set(playerRef, { uid, nickname, avatar:normalizeCharacterId(avatar), ready: false, connected: true, joinedAt: serverTimestamp(), lastSeenAt: serverTimestamp() })
   }) } catch (error) { reportFirebaseError('join-room', error); throw error }
   return normalized
 }
@@ -45,5 +45,8 @@ export async function joinRoom({ code, uid, nickname, avatar }) {
 export const getRoom = code => getDoc(doc(db, 'rooms', normalizeRoomCode(code)))
 export const watchRoom = (code, callback, onError) => onSnapshot(doc(db, 'rooms', normalizeRoomCode(code)), snap => callback(snap.exists() ? { id: snap.id, ...snap.data() } : null), onError)
 export const watchPlayers = (code, callback, onError) => onSnapshot(collection(db, 'rooms', normalizeRoomCode(code), 'players'), snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() }))), onError)
-export const setReady = (code, uid, ready) => updateDoc(doc(db, 'rooms', normalizeRoomCode(code), 'players', uid), { ready, lastSeenAt: serverTimestamp() })
+export async function setReady(code, uid, ready) {
+  const roomRef=doc(db,'rooms',normalizeRoomCode(code)),playerRef=doc(roomRef,'players',uid)
+  return runTransaction(db,async tx=>{const [roomSnap,playerSnap]=await Promise.all([tx.get(roomRef),tx.get(playerRef)]);if(!roomSnap.exists()||!playerSnap.exists())throw new Error('ROOM_NOT_FOUND');const current=Boolean(playerSnap.data().ready);if(current===Boolean(ready))return;tx.update(roomRef,{readyCount:(roomSnap.data().readyCount||0)+(ready?1:-1),updatedAt:serverTimestamp()});tx.update(playerRef,{ready:Boolean(ready),lastSeenAt:serverTimestamp()})})
+}
 export const updateRoomSettings = (code, settings) => updateDoc(doc(db, 'rooms', normalizeRoomCode(code)), { ...settings, updatedAt: serverTimestamp() })
