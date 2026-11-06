@@ -36,7 +36,8 @@ service cloud.firestore {
       allow delete: if false;
 
       match /players/{playerId} {
-        allow read: if member(roomId);
+        allow get: if signedIn() && (playerId == request.auth.uid || member(roomId));
+        allow list: if member(roomId);
         allow create: if signedIn() && playerId==request.auth.uid && request.resource.data.uid==playerId && request.resource.data.keys().hasOnly(['uid','nickname','avatar','ready','connected','joinedAt','lastSeenAt']) && ((roomAfter(roomId).hostUid==playerId && roomAfter(roomId).playerCount==1 && request.resource.data.ready==true) || (exists(roomPath(roomId)) && roomAfter(roomId).playerCount==room(roomId).playerCount+1 && request.resource.data.ready==false));
         allow update: if playerId==request.auth.uid && request.resource.data.uid==resource.data.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nickname','avatar','ready','connected','lastSeenAt']) && (request.resource.data.ready==resource.data.ready || (room(roomId).status=='lobby' && roomAfter(roomId).readyCount==room(roomId).readyCount+(request.resource.data.ready==true?1:-1)));
         allow delete: if false;
