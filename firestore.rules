@@ -1,0 +1,75 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function room(roomId) { return get(/databases/$(database)/documents/rooms/$(roomId)).data; }
+    function roomAfter(roomId) { return getAfter(/databases/$(database)/documents/rooms/$(roomId)).data; }
+    function member(roomId) { return signedIn() && exists(/databases/$(database)/documents/rooms/$(roomId)/players/$(request.auth.uid)); }
+    function host(roomId) { return signedIn() && room(roomId).hostUid == request.auth.uid; }
+    function round(roomId, roundId) { return get(/databases/$(database)/documents/rooms/$(roomId)/rounds/$(roundId)).data; }
+
+    match /rooms/{roomId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.hostUid == request.auth.uid
+        && request.resource.data.code == roomId
+        && request.resource.data.status == 'lobby'
+        && request.resource.data.playerCount == 1
+        && request.resource.data.maxPlayers == 10;
+      allow update: if signedIn() && (
+        (host(roomId) && resource.data.status == 'lobby'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name','totalRounds','durationSeconds','categories','letterMode','instantStopEnabled','updatedAt']))
+        || (resource.data.status == 'lobby'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['playerCount','updatedAt'])
+          && request.resource.data.playerCount == resource.data.playerCount + 1
+          && request.resource.data.playerCount <= resource.data.maxPlayers
+          && !exists(/databases/$(database)/documents/rooms/$(roomId)/players/$(request.auth.uid))
+          && getAfter(/databases/$(database)/documents/rooms/$(roomId)/players/$(request.auth.uid)).data.uid == request.auth.uid)
+      );
+      allow delete: if false;
+
+      match /players/{playerId} {
+allow read: if signedIn() &&
+  (
+    playerId == request.auth.uid ||
+    member(roomId)
+  );        allow create: if signedIn() && playerId == request.auth.uid
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.totalScore == 0
+          && roomAfter(roomId).playerCount <= roomAfter(roomId).maxPlayers
+          && (
+            (!exists(/databases/$(database)/documents/rooms/$(roomId))
+              && roomAfter(roomId).hostUid == request.auth.uid
+              && roomAfter(roomId).playerCount == 1)
+            || (exists(/databases/$(database)/documents/rooms/$(roomId))
+              && roomAfter(roomId).playerCount == room(roomId).playerCount + 1)
+          );
+        allow update: if playerId == request.auth.uid
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.totalScore == resource.data.totalScore
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nickname','avatar','ready','connected','lastSeenAt']);
+        allow delete: if false;
+      }
+
+      match /rounds/{roundId} {
+        allow read: if member(roomId);
+        allow write: if false;
+
+        match /answers/{playerId} {
+          allow read: if signedIn() && (
+            playerId == request.auth.uid
+            || (host(roomId) && round(roomId, roundId).status in ['reviewing', 'finalized'])
+            || (member(roomId) && round(roomId, roundId).status == 'finalized')
+          );
+          allow create, update: if signedIn() && playerId == request.auth.uid
+            && request.resource.data.uid == request.auth.uid
+            && round(roomId, roundId).status == 'answering'
+            && request.time < round(roomId, roundId).deadline
+            && request.resource.data.keys().hasOnly(['uid','values','updatedAt'])
+            && request.resource.data.values.keys().hasOnly(room(roomId).categories);
+          allow delete: if false;
+        }
+      }
+    }
+  }
+}
