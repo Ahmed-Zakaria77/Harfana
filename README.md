@@ -18,8 +18,8 @@ npm run dev
 - التطبيع العربي واكتشاف الإجابات المتكررة ينتجان **اقتراحاً فقط**، ولا يعتمدان النتيجة.
 - لا يوجد تصويت لاعبين أو اعتراضات أو قرار بالأغلبية.
 - أثناء التصحيح يرى اللاعبون شاشة انتظار للقراءة فقط.
-- في Firebase ستتم عملية اعتماد الجولة عبر callable Cloud Function تتحقق من UID الأدمن، وحالة الجولة، وعدم اعتمادها سابقاً. العملية تحسب إجماليات الجولة وتحدّث الترتيب داخل transaction واحدة.
-- قواعد Firestore تمنع كل client writes على حقول `approvedScore` و`roundTotal` و`totalScore`، وتمنع تعديل إجابات مقفولة. النتيجة المعتمدة immutable، والأدمن وحده يبدأ الجولة التالية.
+- اعتماد الجولة يتم في Firestore transaction من Web SDK وتتحقق منه Security Rules: UID الأدمن، حالة الجولة، كل اللاعبين والتصنيفات، والقيم 0/5/10.
+- مستند نتيجة الجولة يُنشأ مرة واحدة ولا يقبل update أو delete. الترتيب التراكمي مشتق للعرض من نتائج الجولات غير القابلة للتعديل، ولا يوجد حقل إجمالي قابل للكتابة.
 
 ## إعداد Firebase المطلوب
 
@@ -28,15 +28,16 @@ npm run dev
 3. من Project settings > Your apps أنشئ Web App وانسخ القيم الست إلى `.env.local` باستخدام أسماء المتغيرات الموجودة في `.env.example`.
 4. شغّل `firebase login` ثم `firebase use --add` لاختيار المشروع. أو انسخ `.firebaserc.example` إلى `.firebaserc` واستبدل Project ID.
 5. أضف نطاق الإنتاج وقيمة `PROJECT_ID.web.app` إلى Authentication > Settings > Authorized domains.
-6. رقِّ المشروع إلى Blaze قبل نشر Cloud Functions. الاستضافة وحدها لا تحتاج Admin SDK credentials، ولا يجب تنزيل أو حفظ service-account key.
+6. الخطة المجانية Spark كافية لهذا التصميم؛ لا توجد Cloud Functions ولا service-account keys.
 
-الدوال في `functions/index.js` هي المسؤولة عن بدء الجولة، الموعد النهائي، قفلها، اعتماد النقاط، وتحديث الترتيب داخل transactions. GitHub Pages يستضيف الواجهة فقط؛ يجب نشر Functions وFirestore Rules إلى Firebase حتى لو كانت الواجهة على Pages.
+بدء الجولة، القفل، حرفنة، والاعتماد تستخدم Firestore transactions من العميل، وتفرض القواعد الانتقالات الذرية عبر `getAfter()` و`request.time`. يجب نشر Firestore Rules حتى عند استضافة الواجهة على GitHub Pages.
+
+حدود Spark المهمة: لا يوجد scheduler داخل Firestore. لو انتهى الوقت وكل الأجهزة غير متصلة، تظل الكتابة ممنوعة بعد `deadline` فوراً بالقواعد، وتنتقل الحالة إلى التصحيح عند أول عميل متصل يحاول القفل. اختيار الحرف العشوائي يتم في واجهة الأدمن؛ القواعد تمنع حرفاً غير صالح أو مكرراً لكن لا تستطيع إثبات العشوائية بدون backend موثوق.
 
 ## المحاكيات
 
 ```bash
 npm install
-npm --prefix functions install
 cp .env.example .env.local
 # ضع Project ID تجريبي وقيم Web App، ثم:
 npm run emulators
@@ -58,7 +59,7 @@ npm run test:rules
 
 ```bash
 npm run build
-firebase deploy --only firestore:rules,firestore:indexes,functions
+firebase deploy --only firestore:rules,firestore:indexes
 firebase deploy --only hosting
 ```
 
