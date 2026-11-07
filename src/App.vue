@@ -1,9 +1,13 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { Volume2, VolumeX, Settings, X } from 'lucide-vue-next'
 import { useSettingsStore } from './stores/settings.js'
 import { audioManager } from './audio/manager.js'
+import AppFooter from './components/common/AppFooter.vue'
 const settings = useSettingsStore()
+const route = useRoute()
+const gameLayout = computed(() => route.name === 'game')
 const showSettings = ref(false)
 audioManager.configure(()=>({muted:settings.muted,effectsEnabled:settings.effectsEnabled,timerEnabled:settings.timerEnabled,volume:settings.volume}))
 function handleUiAudio(event){const target=event.target.closest?.('button,a');if(!target||target.dataset.audio==='none')return;audioManager.play(target.dataset.audio||'click')}
@@ -12,8 +16,8 @@ function previewSound(){audioManager.play('roundStart',{force:true})}
 </script>
 
 <template>
-  <div class="app-shell" :class="{ 'reduce-motion': settings.reducedMotion }" @click.capture="handleUiAudio">
-    <header class="topbar">
+  <div class="app-shell" :class="{ 'reduce-motion': settings.reducedMotion, 'game-layout': gameLayout }" @click.capture="handleUiAudio">
+    <header v-if="!gameLayout" class="topbar">
       <RouterLink to="/" class="mini-brand" aria-label="حرفنة — الصفحة الرئيسية"><img src="/logo.png" alt="حرفنة" /></RouterLink>
       <div class="top-actions">
         <button class="icon-btn" data-audio="none" :aria-label="settings.muted ? 'شغّل الصوت' : 'اقفل الصوت'" @click="toggleMute"><VolumeX v-if="settings.muted"/><Volume2 v-else/></button>
@@ -21,7 +25,7 @@ function previewSound(){audioManager.play('roundStart',{force:true})}
       </div>
     </header>
     <main><RouterView @open-settings="showSettings = true" /></main>
-    <footer>اتعملت بحب ولمّة حلوة 💜</footer>
+    <AppFooter />
     <Transition name="fade">
       <div v-if="showSettings" class="modal-backdrop" @click.self="showSettings = false">
         <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="settings-title">
