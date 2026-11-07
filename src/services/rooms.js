@@ -14,7 +14,7 @@ export async function createRoom({ uid, nickname, avatar, name, rounds, duration
       await runTransaction(db, async tx => {
         if ((await tx.get(roomRef)).exists()) throw new Error('CODE_COLLISION')
         const now = serverTimestamp()
-        tx.set(roomRef, { code, name, hostUid: uid, status: 'lobby', playerCount: 1, readyCount: 1, playerUids: [uid], maxPlayers: 10, totalRounds: Number(rounds), roundNumber: 0, durationSeconds: Number(duration), categories, letterMode, instantStopEnabled:Boolean(instantStopEnabled), usedLetters: [], currentRoundId: null, createdAt: now, updatedAt: now })
+        tx.set(roomRef, { code, name, hostUid: uid, status: 'lobby', gameId: 'g1', gameNumber: 1, playerCount: 1, readyCount: 1, playerUids: [uid], maxPlayers: 10, totalRounds: Number(rounds), roundNumber: 0, durationSeconds: Number(duration), categories, letterMode, instantStopEnabled:Boolean(instantStopEnabled), usedLetters: [], currentRoundId: null, createdAt: now, updatedAt: now })
         tx.set(playerRef, { uid, nickname, avatar:normalizeCharacterId(avatar), ready: true, connected: true, joinedAt: now, lastSeenAt: now })
       })
       return code

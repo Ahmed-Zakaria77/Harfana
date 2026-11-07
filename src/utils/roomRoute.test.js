@@ -9,6 +9,9 @@ describe('Firestore-driven room navigation', () => {
     expect(roomRoute({ status: 'review', currentRoundId: 'r3' }, 'ABC123')).toBe('/room/ABC123/round/r3/review')
     expect(roomRoute({ status: 'results', currentRoundId: 'r3' }, 'ABC123')).toBe('/room/ABC123/results')
   })
+  it('restores the final leaderboard after the game is finished', () => {
+    expect(roomRoute({ status: 'finished', currentRoundId: 'g1-r3' }, 'ABC123')).toBe('/room/ABC123/results')
+  })
   it('waits during preparing until the shared deadline is committed', () => {
     expect(roomRoute({ status: 'preparing', currentRoundId: 'r2' }, 'ABC123')).toBeNull()
   })
